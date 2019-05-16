@@ -1,0 +1,228 @@
+!pip install -U -q PyDrive ## you will have install for every colab session
+!pip install wordcloud
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from google.colab import auth
+from oauth2client.client import GoogleCredentials
+
+# 1. Authenticate and create the PyDrive client.
+auth.authenticate_user()
+gauth = GoogleAuth()
+gauth.credentials = GoogleCredentials.get_application_default()
+drive = GoogleDrive(gauth)
+
+#---------------------------------------------
+
+from sklearn.cluster import KMeans
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+import numpy as np
+
+from google.colab import drive 
+drive.mount('/content/drive') #This way you can access all files on your drive
+#!ls "/content/drive/My Drive/Colab Notebooks" 
+
+#----------------------------------------------
+
+
+# link = 'https://drive.google.com/open?id=119WXujCb5KzFVpxHRPZmxHtsS2ijzNIY'
+# fluff, id = link.split ('=')
+# print (id)
+
+# downloaded = drive.CreateFile({'id':id})
+# downloaded.GetContentFile('glove_s50.txt')
+
+# link = 'https://drive.google.com/open?id=1XrKtmemSI-Hw_XRQsnMDTrDp3F0IEcEF'
+# fluff, id = link.split ('=')
+# print (id)
+
+# downloaded_test = drive.CreateFile({'id':id})
+# downloaded_test.GetContentFile('arquivo')
+
+# input("arquivo lido")
+
+
+
+
+
+
+
+
+
+def character_remove(old, to_remove):
+    new_string = old
+    for x in to_remove:
+        new_string = new_string.replace(x, '')
+    return new_string
+
+
+  
+
+def vectorize(text, model):
+  """Receives the raw text and the glove model to perform the word-for-word vectorization 
+and returns a 50-dimensional vector representing the text through the vector mean of 
+all words "Found in the glove"". """ 
+  vector = 0 
+  index = 0
+  for line in text:
+    aux = line.split()
+    for word in aux:
+      try:
+          if index == 0:
+            word = character_remove(word, "!@#$%&.,!?+-=")
+            vector = list(model[word])
+            index += 1
+          else:
+#             if len(list(model[word])) != 50:
+#               print("Diferente de 50")
+#               print(word)
+#               print(list(model[word]))
+            vector = np.add(vector,list(model[word]))
+            index += 1
+      except (KeyError):
+        continue
+  
+  
+  vector = np.true_divide(vector,index)
+  return vector
+
+
+
+def load_text(name):
+  #Will load the text from the file path of your drive
+  file = open(name,"r")
+  lines_text = file.readlines()
+  file.close()
+  
+  return lines_text
+
+
+
+def loadGloveModel(file_location):
+  """Receives the location of the glove file with the word vectors and returns 
+an matrix (n, 50) in which n is the number of existing words. You can search any vector using the key that is the word itself . """
+  print ("Loading Glove Model\n")
+  
+  text_file = open(file_location, "r")
+  content = text_file.readlines()
+  text_file.close()
+  
+  
+  model = {}
+  print("runing...")
+  i = 0
+  try:
+    for line in content:
+      i += 1
+      splitLine = line.split()
+      word = splitLine[0]
+      embedding = np.array([float(val) for val in splitLine[1:]])
+      model[word] = embedding
+  except ValueError:
+    print(i)
+    print(content[i-1])
+    print(len(content[i-1]))
+
+    
+  print("finalized!\n")
+  return model
+
+
+
+
+
+
+def main():
+    """Função principal da aplicação.
+    """
+    #You should use the path to your file directory
+    model= loadGloveModel("/content/drive/My Drive/Colab Notebooks/glove_s50.txt")
+    matriz = []
+    #For a hundred texts I use the path path, read and vectorize the text and return the array of vectors that result from each one
+    for i in range(1,201):
+      name_text = "/content/drive/My Drive/TextosYoutubers/textos_anderson/track_"+str(i)+".txt"
+      text = load_text(name_text)
+      matriz.append(vectorize(text,model))
+
+
+    #Elbow method. This method plots the sum of squares errors according to the number of iterated clusters in the matrix
+    wcss = [] 
+    for i in range(1, 101):
+        kmeans = KMeans(n_clusters = i, init = 'random')
+        kmeans.fit(matriz)
+        print (i,kmeans.inertia_)
+        wcss.append(kmeans.inertia_)  
+    plt.plot(range(1, 101), wcss)
+    plt.title('O Metodo Elbow')
+    plt.xlabel('Numero de Clusters')
+    plt.ylabel('WSS') #within cluster sum of squares
+    plt.show()
+
+
+
+    #Clustering
+    kmeans = KMeans(n_clusters = 100, init = 'k-means++')
+    kmeans.fit(matriz) # efetua a clusterizacao fit_transform
+    #print(kmeans.fit_transform(tokenizer)) // retorna a distancia de cada ponto em relacao aos centroides de cada cluster
+    #kmeans.cluster_centers_ #  mostra os centroides 
+    #print(len(kmeans.labels_) #mostra o centroide associado a cada token
+
+
+
+
+    y_km = kmeans.fit_predict(matriz) # Compute cluster centers and predict cluster index for each sample 
+    print(y_km,len(y_km))
+    #plotting the graph
+    myarray = np.asarray(matriz)
+    plt.scatter(myarray[:, 0], myarray[:,1], s = 1500, c = kmeans.labels_)
+    plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s = 300, c = 'red',label = 'Centroids')
+    plt.title('Clusters and Centroids')
+    plt.legend()
+
+    plt.show()
+
+    #another graph
+    plt.scatter(myarray[y_km == 0, 0],myarray[y_km == 0, 1],s=50, c='lightgreen',marker='s', edgecolor='black',label='cluster 1')
+    plt.scatter(myarray[y_km == 1, 0],myarray[y_km == 1, 1],s=50, c='orange',marker='o', edgecolor='black',label='cluster 2')
+    plt.scatter(myarray[y_km == 2, 0],myarray[y_km == 2, 1],s=50, c='lightblue',marker='v', edgecolor='black',label='cluster 3')
+    plt.scatter(kmeans.cluster_centers_[:, 0],kmeans.cluster_centers_[:, 1],s=250, marker='*',c='red', edgecolor='black',label='centroids')
+    plt.legend(scatterpoints=1)
+    plt.grid()
+    plt.show()
+    
+    
+    #Wordcloud
+    text = 0
+    textResult = 0 
+    aux = 0
+    y_km = list(map(int,y_km))
+    for index,value in enumerate(y_km):
+      if value == 60 and aux == 0:
+        textResult = open("/content/drive/My Drive/TextosYoutubers/textos_anderson/track_"+str(index + 1)+".txt",'r').read()
+        aux += 1
+      
+      elif value == 60 and aux != 0:
+        text = open("/content/drive/My Drive/TextosYoutubers/textos_anderson/track_"+str(index + 1)+".txt",'r').read()
+        textResult += " " + text
+        aux += 1
+      
+    wordcloud = WordCloud(max_font_size=120,width = 1600, height = 600).generate(textResult)
+    plt.figure(figsize=(16,9))
+    plt.imshow(wordcloud)
+    plt.axis("off")
+    plt.show()
+    print(aux)
+        
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
